@@ -6,7 +6,7 @@ boot.hex:boot.elf
 boot.elf: boot.o
 		avr-gcc -g -mmcu=atmega168 -Wl,-section-start=.text=0x3C00 -o boot.elf boot.o
 boot.o: boot.c
-	avr-gcc -g -Os -Wall -Wshadow -W -mmcu=atmega168 -c boot.c
+	avr-gcc -g -Os  -mmcu=atmega168 -c boot.c
 
 clean:
 	rm boot.elf boot.o boot.hex
@@ -19,4 +19,4 @@ dump:
 	avrdude -c usbtiny -p m168 -U flash:r:"./dump.hex":i
 
 erase:
-	 avrdude -c usbtiny -p m168  erase
+	avrdude -c usbtiny -p m168  -e
