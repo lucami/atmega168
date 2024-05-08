@@ -2,6 +2,9 @@
 #define BAUD 9600
 #define LOCALUBRR F_CPU/16/BAUD-1
 
+#define init_gpio  (DDRB = 0b00000010)
+
+
 #define setBit(reg, bit)    (reg = reg | (1 << bit))
 #define clearBit(reg, bit)  (reg = reg & ~(1 << bit))
 #define toggleBit(reg, bit) (reg = reg ^ (1 << bit))
@@ -13,8 +16,6 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <string.h>
-
-
 
 
 uint8_t blinky_test_program_bin[] = {
@@ -41,7 +42,10 @@ uint8_t blinky_test_program_bin[] = {
 0xf8, 0x94, 0xff, 0xcf
 };
 
-
+uint8_t read_char(){
+   while(!(UCSR0A & (1 << RXC0)));
+   return UDR0;
+}
 
 void send_char(uint8_t c){
 
@@ -57,27 +61,20 @@ void send_str(uint8_t *s){
     }
 }
 
+uint8_t USART_receive(void){
+    uint16_t timeout=500;
 
-/**
- * @brief Writes a program to a specified memory address.
+    while( (!(UCSR0A & (1<<RXC0))) && timeout)
+    {
+      timeout--;
+      _delay_ms(10);
+    }
+    if (timeout==0)
+      return 0;
+    else
+      return UDR0;
+}
 
- * @param address The memory address to write the program to.
- * This address must be PAGE-ALIGNED and valid for writing operations.
-
- * @param program_buffer A pointer to a buffer containing the program to be written.
-
- * @param program_buffer_size The size of the program buffer in bytes.
- * This value specifies the amount of data to be written from the `program_buffer`.
- * `program_buffer_size` needs to be a multiple of 2.
-
- * @retval None.
-
- * @details
- * The `write_program` function writes the contents of the `program_buffer` to the specified memory address.
- * It is typically used to write firmware or other executable code to embedded devices.
-
- * @warning Writing to invalid memory locations can lead to system instability or crashes. Ensure that the `address` points to a valid memory region where writing is allowed.
- */
 void write_program(const uint32_t address, const uint8_t *program_buffer, const uint32_t program_buffer_size)
 {
   // Disable interrupts.
@@ -151,28 +148,28 @@ void USART_Init() {
 
 }
 
-void GPIO_Init(){
-  DDRB = 0b00000010;
-
-}
-
-void USART_Flush( void ) {
-  unsigned char dummy;
-  dummy = UDR0;
-  (void)dummy;
-}
 
 int main(void)
 {
-  GPIO_Init();
+  uint8_t uart_char;
+  init_gpio;
 
 
   USART_Init();
-
-  uint8_t *str = "Bootloader V:0.1\r";
+  uint8_t *str = "Boot\r\n";
   send_str(str);
 
-  _delay_ms(50);
+  PORTB ^= (1 << PB1); // Toggle the LED
+  _delay_ms(100); // Wait for 100 ms
+  PORTB ^= (1 << PB1); // Toggle the LED
+
+
+  uart_char = USART_receive();
+  _delay_ms(100); // Wait for 100 ms
+  send_char(uart_char+1);
+
+
+  //-----BOOTLOADER-----
 
   // Check if a user program exists in flash memory
   if (pgm_read_word(0) == 0xFFFF)
@@ -182,18 +179,15 @@ int main(void)
     write_program(0, blinky_test_program_bin, sizeof(blinky_test_program_bin));
   }
 
+
   str = "Writing complete\r";
   send_str(str);
+  PORTB ^= (1 << PB1); // Toggle the LED
+
   _delay_ms(50);
-
-
   PORTB ^= (1 << PB1); // Toggle the LED
   _delay_ms(100); // Wait for 100 ms
-  PORTB ^= (1 << PB1); // Toggle the LED
-
 
   // Jump to the start address of the user program (0x0000)
   asm("jmp 0");
-
-  // Bootloader ends here
 }
