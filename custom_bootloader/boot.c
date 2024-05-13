@@ -61,7 +61,7 @@ void send_str(uint8_t *s){
     }
 }
 
-uint8_t USART_receive(void){
+uint8_t USART_timeout_receive(void){
     uint16_t timeout=500;
 
     while( (!(UCSR0A & (1<<RXC0))) && timeout)
@@ -75,21 +75,26 @@ uint8_t USART_receive(void){
       return UDR0;
 }
 
+void load_page(){
+
+}
+
 void write_program(const uint32_t address, const uint8_t *program_buffer, const uint32_t program_buffer_size)
 {
+  //SPM_PAGESIZE dovrebbe essere 128 bytes
   // Disable interrupts.
   uint8_t sreg_last_state = SREG;
   cli();
   eeprom_busy_wait();
 
   // iterate through the program_buffer one page at a time
+  //SPM_PAGESIZE dovrebbe essere 0x0080
   for (uint32_t current_page_address = address;current_page_address < (address + program_buffer_size);current_page_address += SPM_PAGESIZE)
   {
     boot_page_erase(current_page_address);
     boot_spm_busy_wait(); // Wait until the memory is erased.
 
     // iterate through the page, one word (two bytes) at a time
-
     for (uint16_t i = 0; i < SPM_PAGESIZE; i += 2)
     {
       uint16_t current_word = 0;
@@ -149,6 +154,19 @@ void USART_Init() {
 }
 
 
+//Riceve una pagina byte a byte.
+//ogni coppia di byte viene scritta nella memoria temporanea
+//viene valutato il CRC
+//viene scritta la memoria del bootloader
+
+void receive_page(){
+
+}
+
+void write_page(){
+
+}
+
 int main(void)
 {
   uint8_t uart_char;
@@ -164,30 +182,30 @@ int main(void)
   PORTB ^= (1 << PB1); // Toggle the LED
 
 
-  uart_char = USART_receive();
-  _delay_ms(100); // Wait for 100 ms
-  send_char(uart_char+1);
-
-
-  //-----BOOTLOADER-----
-
-  // Check if a user program exists in flash memory
-  if (pgm_read_word(0) == 0xFFFF)
+  uart_char = USART_timeout_receive();
+  if(uart_char != 0)
   {
+    _delay_ms(100); // Wait for 100 ms
+    send_char((SPM_PAGESIZE>>8)&0x00ff);
+    _delay_ms(10);
+    send_char(0x00ff&SPM_PAGESIZE);
+    _delay_ms(10);
 
-    _delay_ms(50);
-    write_program(0, blinky_test_program_bin, sizeof(blinky_test_program_bin));
+
+    //-----BOOTLOADER-----
+
+    // Check if a user program exists in flash memory
+    if (pgm_read_word(0) == 0xFFFF)
+    {
+
+      _delay_ms(50);
+      write_program(0, blinky_test_program_bin, sizeof(blinky_test_program_bin));
+    }
+
+
+    str = "Writing complete\r";
+    send_str(str);
   }
-
-
-  str = "Writing complete\r";
-  send_str(str);
-  PORTB ^= (1 << PB1); // Toggle the LED
-
-  _delay_ms(50);
-  PORTB ^= (1 << PB1); // Toggle the LED
-  _delay_ms(100); // Wait for 100 ms
-
   // Jump to the start address of the user program (0x0000)
   asm("jmp 0");
 }

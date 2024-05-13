@@ -1,7 +1,8 @@
 
 boot.hex:boot.elf
 	avr-objcopy -j .text -j .data -O ihex boot.elf boot.hex
-	avr-size --format=avr --mcu=atmega168 boot.elf
+	#avr-size --format=avr --mcu=atmega168 boot.elf
+	avr-size -A -d  --common boot.elf
 
 boot.elf: boot.o
 		avr-gcc -g -mmcu=atmega168 -Wl,-section-start=.text=0x3C00 -o boot.elf boot.o
