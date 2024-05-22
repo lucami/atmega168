@@ -5,7 +5,8 @@ boot.hex:boot.elf
 	avr-size -A -d  --common boot.elf
 
 boot.elf: boot.o
-		avr-gcc -g -mmcu=atmega168 -Wl,-section-start=.text=0x3C00 -o boot.elf boot.o
+		#avr-gcc -g -mmcu=atmega168 -Wl,-section-start=.text=0x3C00 -o boot.elf boot.o
+		avr-gcc -g -mmcu=atmega168 -Wl,-section-start=.text=0x3800 -o boot.elf boot.o
 boot.o: boot.c
 	avr-gcc -g -Os  -mmcu=atmega168 -c boot.c
 
@@ -13,7 +14,8 @@ clean:
 	rm boot.elf boot.o boot.hex
 
 load:
-	avrdude -c usbtiny -p m168 -U lfuse:w:0xEF:m -U hfuse:w:0xdf:m -U efuse:w:0xFA:m
+	#avrdude -c usbtiny -p m168 -U lfuse:w:0xEF:m -U hfuse:w:0xdf:m -U efuse:w:0xFA:m
+	avrdude -c usbtiny -p m168 -U lfuse:w:0xEF:m -U hfuse:w:0xdf:m -U efuse:w:0xF8:m
 	avrdude -c usbtiny -p m168 -U flash:w:boot.hex
 
 dump:

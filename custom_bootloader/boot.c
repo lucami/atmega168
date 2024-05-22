@@ -16,8 +16,10 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-
+//164
 uint8_t blinky_test_program_bin[] = {
 0x0c, 0x94, 0x34, 0x00, 0x0c, 0x94, 0x3e, 0x00,
 0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
@@ -41,6 +43,8 @@ uint8_t blinky_test_program_bin[] = {
 0xe1, 0xf7, 0x00, 0xc0, 0x00, 0x00, 0xf3, 0xcf,
 0xf8, 0x94, 0xff, 0xcf
 };
+
+uint16_t filesize = 0;
 
 uint8_t read_char(){
    while(!(UCSR0A & (1 << RXC0)));
@@ -154,22 +158,47 @@ void USART_Init() {
 }
 
 
-//Riceve una pagina byte a byte.
-//ogni coppia di byte viene scritta nella memoria temporanea
-//viene valutato il CRC
-//viene scritta la memoria del bootloader
 
 void receive_page(){
 
+  uint8_t *str;
+  uint8_t c;
+  uint8_t asd=0;
+  uint8_t page_buffer[SPM_PAGESIZE];
+  uint16_t i=0;
+
+  for(i=0; i<SPM_PAGESIZE; i++){
+    PORTB ^= (1 << PB1); // Toggle the LED
+    c = read_char();
+    page_buffer[i]=c;
+    _delay_ms(5);
+    send_char(c);
+    str = "\r\n";
+    send_str(str);
+    asd++;
+  }
+
 }
 
-void write_page(){
+//Riceve una pagina byte a byte.
+//ogni coppia di byte viene scritta nella memoria temporanea
+//viene valutato il CRC
+//viene scritta la memoria del boo
+void receive_pages(){
 
+  uint8_t i;
+
+  for(i=0; i<=filesize/SPM_PAGESIZE;i++)
+  {
+    receive_page();
+    //write_page();
+  }
 }
+
+
 
 int main(void)
 {
-  uint8_t uart_char;
   init_gpio;
 
 
@@ -177,19 +206,33 @@ int main(void)
   uint8_t *str = "Boot\r\n";
   send_str(str);
 
-  PORTB ^= (1 << PB1); // Toggle the LED
-  _delay_ms(100); // Wait for 100 ms
-  PORTB ^= (1 << PB1); // Toggle the LED
 
 
-  uart_char = USART_timeout_receive();
-  if(uart_char != 0)
+  filesize = USART_timeout_receive();
+  if(filesize != 0)
   {
+
+    filesize |= read_char()<<8;
+
+    send_char((uint8_t)(0x00ff&filesize));
+    _delay_ms(10);
+    send_char((uint8_t)((filesize>>8)&0x00ff));
+
+    str = "\r\n";
+    send_str(str);
+
     _delay_ms(100); // Wait for 100 ms
-    send_char((SPM_PAGESIZE>>8)&0x00ff);
+    send_char((uint8_t)(0x00ff&SPM_PAGESIZE));
+
     _delay_ms(10);
-    send_char(0x00ff&SPM_PAGESIZE);
-    _delay_ms(10);
+    send_char((uint8_t)((SPM_PAGESIZE>>8)&0x00ff));
+
+    str = "\r\n";
+    send_str(str);
+
+
+    receive_pages();
+
 
 
     //-----BOOTLOADER-----
@@ -203,7 +246,7 @@ int main(void)
     }
 
 
-    str = "Writing complete\r";
+    str = "Complete\r\n";
     send_str(str);
   }
   // Jump to the start address of the user program (0x0000)
