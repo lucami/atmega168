@@ -2,7 +2,7 @@
 #define BAUD 9600
 #define LOCALUBRR F_CPU/16/BAUD-1
 
-#define init_gpio  (DDRB = 0b00000010)
+#define init_gpio  (DDRB = 0b00000011)
 
 
 #define setBit(reg, bit)    (reg = reg | (1 << bit))
@@ -44,7 +44,7 @@ uint8_t blinky_test_program_bin[] = {
 0xf8, 0x94, 0xff, 0xcf
 };
 
-uint16_t filesize = 0;
+uint32_t filesize = 0;
 
 uint8_t read_char(){
    while(!(UCSR0A & (1 << RXC0)));
@@ -161,23 +161,54 @@ void USART_Init() {
 
 void receive_page(){
 
-  uint8_t *str;
+  static uint32_t current_page_address = 0;
   uint8_t c;
-  uint8_t asd=0;
-  uint8_t page_buffer[SPM_PAGESIZE];
-  uint16_t i=0;
+  uint8_t *str = "\r\n";
 
-  for(i=0; i<SPM_PAGESIZE; i++){
-    PORTB ^= (1 << PB1); // Toggle the LED
-    c = read_char();
-    page_buffer[i]=c;
-    _delay_ms(5);
-    send_char(c);
-    str = "\r\n";
-    send_str(str);
-    asd++;
+  uint32_t i=0;
+  uint16_t word = 0;
+  PORTB &= ~(1 << PB0); // Toggle the LED
+  PORTB &= ~(1 << PB1); // Toggle the LED
+
+  for(i=0; i<SPM_PAGESIZE; i+=2)
+  {
+    if(current_page_address+i < filesize)
+    {
+      PORTB ^= (1 << PB1); // Toggle the LED
+      c = read_char();
+      PORTB ^= (1 << PB1); // Toggle the LED
+      word = c;
+      _delay_ms(5);
+      send_char((uint8_t)i);
+      //send_str(str);
+
+      PORTB ^= (1 << PB0); // Toggle the LED
+      c = read_char();
+      PORTB ^= (1 << PB0); // Toggle the LED
+
+      word |= c<<8;
+      send_char((uint8_t)i+1);
+      _delay_ms(5);
+    }
+    else
+    {
+      word = 0xFFFF;
+    }
+
+    PORTB &= ~(1 << PB0); // Toggle the LED
+    PORTB &= ~(1 << PB1); // Toggle the LED
+
+    boot_page_fill(current_page_address + i, word);
   }
 
+
+  boot_page_write(current_page_address);
+  boot_spm_busy_wait();                  // Wait until the page is written.
+
+
+  send_char(c);
+  send_str(str);
+  current_page_address+=SPM_PAGESIZE;
 }
 
 //Riceve una pagina byte a byte.
@@ -193,6 +224,9 @@ void receive_pages(){
     receive_page();
     //write_page();
   }
+
+  boot_rww_enable();
+
 }
 
 
@@ -238,13 +272,14 @@ int main(void)
     //-----BOOTLOADER-----
 
     // Check if a user program exists in flash memory
+    /*
     if (pgm_read_word(0) == 0xFFFF)
     {
 
       _delay_ms(50);
       write_program(0, blinky_test_program_bin, sizeof(blinky_test_program_bin));
     }
-
+    */
 
     str = "Complete\r\n";
     send_str(str);
