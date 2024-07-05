@@ -19,32 +19,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-//164
-uint8_t blinky_test_program_bin[] = {
-0x0c, 0x94, 0x34, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x0c, 0x94, 0x3e, 0x00, 0x0c, 0x94, 0x3e, 0x00,
-0x11, 0x24, 0x1f, 0xbe, 0xcf, 0xef, 0xd4, 0xe0,
-0xde, 0xbf, 0xcd, 0xbf, 0x0e, 0x94, 0x40, 0x00,
-0x0c, 0x94, 0x50, 0x00, 0x0c, 0x94, 0x00, 0x00,
-0x81, 0xe0, 0x84, 0xb9, 0x91, 0xe0, 0x85, 0xb1,
-0x89, 0x27, 0x85, 0xb9, 0x2f, 0xef, 0x31, 0xee,
-0x84, 0xe0, 0x21, 0x50, 0x30, 0x40, 0x80, 0x40,
-0xe1, 0xf7, 0x00, 0xc0, 0x00, 0x00, 0xf3, 0xcf,
-0xf8, 0x94, 0xff, 0xcf
-};
-
 uint32_t filesize = 0;
+uint32_t current_page_address = 0;
 
 uint8_t read_char(){
    while(!(UCSR0A & (1 << RXC0)));
@@ -79,60 +55,6 @@ uint8_t USART_timeout_receive(void){
       return UDR0;
 }
 
-void load_page(){
-
-}
-
-void write_program(const uint32_t address, const uint8_t *program_buffer, const uint32_t program_buffer_size)
-{
-  //SPM_PAGESIZE dovrebbe essere 128 bytes
-  // Disable interrupts.
-  uint8_t sreg_last_state = SREG;
-  cli();
-  eeprom_busy_wait();
-
-  // iterate through the program_buffer one page at a time
-  //SPM_PAGESIZE dovrebbe essere 0x0080
-  for (uint32_t current_page_address = address;current_page_address < (address + program_buffer_size);current_page_address += SPM_PAGESIZE)
-  {
-    boot_page_erase(current_page_address);
-    boot_spm_busy_wait(); // Wait until the memory is erased.
-
-    // iterate through the page, one word (two bytes) at a time
-    for (uint16_t i = 0; i < SPM_PAGESIZE; i += 2)
-    {
-      uint16_t current_word = 0;
-      if ((current_page_address + i) < (address + program_buffer_size))
-      {
-        // Set up a little-endian word and point to the next word
-        current_word = *program_buffer;
-        program_buffer++;
-        current_word |= (*program_buffer) << 8;
-        program_buffer++;
-      }
-      else
-      {
-        current_word = 0xFFFF;
-      }
-
-      //send_char((uint8_t)0x00FF&current_word);
-      //send_char((uint8_t)((0xFF00&current_word)>>8));
-      //_delay_ms(100);
-
-      boot_page_fill(current_page_address + i, current_word);
-    }
-
-    boot_page_write(current_page_address); // Store buffer in a page of flash memory.
-    boot_spm_busy_wait();                  // Wait until the page is written.
-  }
-
-  // Re-enable RWW-section. We need this to be able to jump back
-  // to the application after bootloading.
-  boot_rww_enable();
-
-  // Re-enable interrupts (if they were ever enabled).
-  SREG = sreg_last_state;
-}
 
 void USART_Init() {
   clearBit(UCSR0A, MPCM0);			// Normal UART communication
@@ -157,11 +79,8 @@ void USART_Init() {
 
 }
 
-
-
 void receive_page(){
 
-  static uint32_t current_page_address = 0;
   uint8_t c;
   uint8_t *str = "\r\n";
 
@@ -169,7 +88,7 @@ void receive_page(){
   uint16_t word = 0;
   PORTB &= ~(1 << PB0); // Toggle the LED
   PORTB &= ~(1 << PB1); // Toggle the LED
-
+  uint16
   for(i=0; i<SPM_PAGESIZE; i+=2)
   {
     if(current_page_address+i < filesize)
@@ -179,15 +98,14 @@ void receive_page(){
       PORTB ^= (1 << PB1); // Toggle the LED
       word = c;
       _delay_ms(5);
-      send_char((uint8_t)i);
-      //send_str(str);
+      //send_char((uint8_t)c);
 
       PORTB ^= (1 << PB0); // Toggle the LED
       c = read_char();
       PORTB ^= (1 << PB0); // Toggle the LED
 
       word |= c<<8;
-      send_char((uint8_t)i+1);
+      //send_char((uint8_t)c);
       _delay_ms(5);
     }
     else
@@ -201,14 +119,18 @@ void receive_page(){
     boot_page_fill(current_page_address + i, word);
   }
 
-
-  boot_page_write(current_page_address);
-  boot_spm_busy_wait();                  // Wait until the page is written.
-
+  //boot_page_write(current_page_address);
+  //boot_spm_busy_wait();                  // Wait until the page is written.
 
   send_char(c);
   send_str(str);
+}
+
+void write_page(){
+  boot_page_write(current_page_address);
+  boot_spm_busy_wait();                  // Wait until the page is written.
   current_page_address+=SPM_PAGESIZE;
+
 }
 
 //Riceve una pagina byte a byte.
@@ -222,13 +144,12 @@ void receive_pages(){
   for(i=0; i<=filesize/SPM_PAGESIZE;i++)
   {
     receive_page();
-    //write_page();
+    write_page();
   }
 
   boot_rww_enable();
 
 }
-
 
 
 int main(void)
@@ -267,23 +188,10 @@ int main(void)
 
     receive_pages();
 
-
-
-    //-----BOOTLOADER-----
-
-    // Check if a user program exists in flash memory
-    /*
-    if (pgm_read_word(0) == 0xFFFF)
-    {
-
-      _delay_ms(50);
-      write_program(0, blinky_test_program_bin, sizeof(blinky_test_program_bin));
-    }
-    */
-
     str = "Complete\r\n";
     send_str(str);
   }
+
   // Jump to the start address of the user program (0x0000)
   asm("jmp 0");
 }
